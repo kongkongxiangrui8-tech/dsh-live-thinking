@@ -1,15 +1,8 @@
 /**
- * dsh-live-thinking — 客户端半边：在输入框下方增加一行实时的「工作状态」。
+ * dsh-live-thinking — 客户端半边：把「当前正在做什么」推给桌面悬浮窗。
  *
- * 为什么需要它：自带的运行提示只有一句静态文案「深度求索中，用时 N 秒」，
- * 它不说明模型此刻在做什么，而且模型思考、工具执行、请求重试看起来完全一样；
- * 一旦上一条工具调用结束，提示还会停在旧内容上。这一行把当前阶段直接写出来：
- *
- *   🧠 思考中：……当前正在推进的那一行思考……
- *   🛠 bash: pnpm build 运行中 1:23
- *   ✍️ 输出中 0:42
- *   🧠 等待模型响应 0:42
- *   ♻️ 请求重试中（第 N 次）
+ * 曾经它还在输入框下方渲染一行实时状态（`🛠 pwsh 运行中 0:00` 那种）。
+ * 按用户要求，那一行已经删除：组件不再渲染任何 DOM，只做悬浮窗的数据源。
  *
  * 数据来源全部是会话标准件，不读 DOM：
  *   - `useSession` → `{ running, sessionId }`；
@@ -18,9 +11,9 @@
  *   - `useProjection('llmRetry')` → 请求重试投影（缺失时退回
  *     `sessions.binding(id).session.projections.faceOf('llmRetry')`）。
  *
- * 位置：`conversation.composer.dock`（输入框卡片下方那一条，内置的
- * 「N 轮 M 步 · tok/s」统计就在同一个 list 槽里）。本插件 order 为 -1，并且
- * 用一条 CSS 让这个 list 槽换行，于是它独占一行、显示在统计行上方。
+ * 挂在 `conversation.composer.dock`（输入框卡片下方那一条，内置的
+ * 「N 轮 M 步 · tok/s」统计就在同一个 list 槽里），order 为 -1，但渲染 `null`：
+ * 槽位里始终是一个零高度的空条目，界面看起来与没装这个插件一样。
  *
  * 插件不写任何配置、不产生网络请求，卸载后界面立即恢复原样。
  */
@@ -29,8 +22,6 @@
 
   /** 本插件拥有的 locale 命名空间。 */
   const NS = 'live-thinking'
-  /** 样式表标签 id，重复挂载时用来去重。 */
-  const STYLE_ID = 'dsh-live-thinking-style'
   /** 槽内条目标识。 */
   const ENTRY_ID = 'live-thinking'
 
@@ -467,26 +458,6 @@
     return NOOP_HOOK
   }
 
-  /** 注入本行的样式表（只注入一次）。 */
-  function insertStyle() {
-    if (typeof document === 'undefined') return
-    if (document.getElementById(STYLE_ID) !== null) return
-    const style = document.createElement('style')
-    style.id = STYLE_ID
-    style.textContent = [
-      /* 让输入框下方的 list 槽换行，这一行才能独占一行。 */
-      '[data-composer-dock]{flex-wrap:wrap}',
-      '#dsh-live-thinking{flex:1 0 100%;display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding-top:2px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,rgba(0,0,0,.6))}',
-      '#dsh-live-thinking .dsh-lt-icon{flex:none}',
-      '#dsh-live-thinking .dsh-lt-text{min-width:0;max-width:min(76ch,100%);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:dsh-lt-breathe 2.6s ease-in-out infinite}',
-      '#dsh-live-thinking .dsh-lt-elapsed{flex:none;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-tertiary,rgba(0,0,0,.45))}',
-      '#dsh-live-thinking[data-kind="retry"]{color:var(--dsw-alias-state-warn-primary,#b26a00)}',
-      '@keyframes dsh-lt-breathe{0%,100%{opacity:.72}50%{opacity:1}}',
-      '@media (prefers-reduced-motion:reduce){#dsh-live-thinking .dsh-lt-text{animation:none}}',
-    ].join('')
-    document.head.appendChild(style)
-  }
-
   /**
    * 构造插件主体的 apply。
    * @param {object} react - 模块表里的 React。
@@ -561,30 +532,9 @@
           }
       useOverlayBridge(react, overlayPayload, running)
 
-      if (line === null) return null
-
-      const elapsedMs = line.kind === 'tool'
-        ? line.elapsedMs
-        : Math.max(0, now - phase.current.since)
-
-      const text = lineText(line, t)
-      if (text === '') return null
-
-      return react.createElement(
-        'div',
-        {
-          id: 'dsh-live-thinking',
-          'data-kind': line.kind,
-          role: 'status',
-          'aria-live': 'polite',
-          title: text,
-        },
-        react.createElement('span', { className: 'dsh-lt-icon', 'aria-hidden': 'true' }, ICONS[line.kind] ?? '•'),
-        react.createElement('span', { className: 'dsh-lt-text' }, text),
-        line.elapsedMs === null && line.kind === 'retry'
-          ? null
-          : react.createElement('span', { className: 'dsh-lt-elapsed', 'aria-hidden': 'true' }, formatClock(elapsedMs)),
-      )
+      /* 输入框下方那一行状态已经按需求移除：组件现在只是悬浮窗的数据源，
+         不再渲染任何 DOM，槽位里始终是一个零高度的空条目。 */
+      return null
     })
 
     return function apply(ctx) {
@@ -606,9 +556,7 @@
         }
       }
 
-      insertStyle()
-
-      /** 槽条目本身：list 槽里的第二行。 */
+      /** 槽条目本身：只作为悬浮窗的数据源挂在槽里，不渲染任何内容。 */
       const entry = {
         name: 'conversation.composer.dock',
         id: ENTRY_ID,
