@@ -1,0 +1,12 @@
+# dsh-live-thinking bundle patch
+#
+# 这是本包的 `dsh.bundle.patch` 层：用 CLI 安装时
+#
+#   dsh plugin --profile desktop add link:C:\path\to\dsh-live-thinking
+#
+# 会把 `dsh-live-thinking` 追加进 profile 的 `dsh.profile.bundles`，并在启动时
+# 合并这个补丁（一条 insert 行），与手写进 cordis.patch.yml 的效果一致。
+# 同一行也是 `dsh.client` 的浏览器花名册条目，Web 端据此加载 client.js。
+- insert:
+    - id: live-thinking
+      name: 'dsh-live-thinking'
