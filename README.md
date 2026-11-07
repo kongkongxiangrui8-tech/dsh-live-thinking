@@ -6,9 +6,20 @@
 
 ## 效果
 
-**桌面悬浮窗**（置顶、可拖动、无运行回合自动隐藏）：
+**桌面悬浮窗**（置顶、可拖动，260 逻辑像素宽）——工作中：
 
 ![桌面悬浮窗](docs/floating.png)
+
+| 元素 | 说明 |
+| --- | --- |
+| 指示灯 | 🔴 红 = 这一轮正在工作（思考、调工具、输出都算）；🟢 绿 = 工作结束 |
+| 图标 + 标题 | 当前阶段：`思考中` / `正在调用工具` / `等待模型响应` / `输出中` / `请求重试中` |
+| 计时 | 从**当前阶段的起点**算起，不是整轮，所以不会出现「思考中 15:52」 |
+| 详情 | 最新一行思考，先压平换行，超过 **40 字**截断并以 `…` 结尾，最多两行 |
+
+回合结束（收到 `running:false`，或 15 秒没有心跳）会转绿并显示「工作结束」，停留 **20 秒**后自动消失：
+
+![工作结束](docs/floating-done.png)
 
 **输入框下方的一行**（与悬浮窗同源）：
 
@@ -72,7 +83,9 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $
 
 - 入口：`conversation.composer.dock`（会话级 list 槽，内置统计行占的就是这里）。本插件 `order: -1`，并给 `[data-composer-dock]` 补一条 `flex-wrap: wrap`，因此它独占一行、显示在统计行上方。
 - 组件只用槽里发下来的 `useSession` / `useChat` / `useProjection` / `t`；文本随聊天快照的每次增量自动重渲染。
-- `overlay.ps1` 刻意保持**纯 ASCII**（Windows PowerShell 5.1 会把无 BOM 的 .ps1 按 ANSI 读），所有中文和 emoji 都从 JSON 负载里来；布局按 `DpiX/96` 手工缩放，200% 缩放下文字依然清晰。
+- `overlay.ps1` 刻意保持**纯 ASCII**（Windows PowerShell 5.1 会把无 BOM 的 .ps1 按 ANSI 读），所有中文和 emoji 都从 JSON 负载或 Unicode 码点来；布局按 `DpiX/96` 手工缩放，200% 缩放下文字依然清晰。
+- 悬浮窗宽度 260 逻辑像素（520 物理，2x 屏），`Short-Passage` 负责把思考压成一行短句 + `…`；结束态的停留时长是 `$script:doneMs`（默认 20000 毫秒）。
+- 红绿灯：只要这一轮还活着（`running:true`）就是红灯；收到 `running:false` 或心跳超时 → 绿灯 + 「工作结束」，20 秒后隐藏。点 `×` 可立即隐藏，下一轮重新出现。
 - 小窗不抢焦点（`WS_EX_NOACTIVATE`），整张卡片可拖动。
 - `test/live-thinking.test.mjs` 覆盖状态优先级、工具计时、思考行提取与截断、时长格式。
 
